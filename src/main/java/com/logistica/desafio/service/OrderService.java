@@ -10,21 +10,22 @@ import com.logistica.desafio.repository.OrderRepository;
 import com.logistica.desafio.repository.UserRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,9 +33,6 @@ public class OrderService {
 
     private final UserRepository userRepository;
     private final OrderRepository orderRepository;
-
-    @Value("${file.upload.directory}")
-    private String directory;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -80,24 +78,18 @@ public class OrderService {
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public void processFileFromPath(String filename) throws Exception {
-
-        Path filePath = Paths.get(directory, filename);
-
-        System.out.println("Tentando buscar o arquivo em: " + filePath.toAbsolutePath());
-
-        if (!Files.exists(filePath)) {
-            System.out.println("Arquivo não encontrado. Verifique se o caminho está correto.");
-            throw new IOException("Arquivo não encontrado no caminho: " + filePath.toAbsolutePath());
-        } else {
-            System.out.println("Arquivo encontrado no caminho: " + filePath.toAbsolutePath());
+    public void processFile(MultipartFile file) throws Exception {
+        if (file.isEmpty()) {
+            throw new IOException("O arquivo está vazio");
         }
 
         // Definir o tamanho do lote para salvar registros no banco de dados em partes
         int batchSize = 50;
         int count = 0;
 
-        try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
+        try (InputStream inputStream = file.getInputStream();
+             BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
+
             String line;
             Map<Long, User> userMap = new HashMap<>();
 
