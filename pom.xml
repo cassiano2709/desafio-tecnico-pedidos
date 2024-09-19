@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>com.logistica</groupId>
 	<artifactId>desafio</artifactId>
-	<version>2.0.0-release</version>
+	<version>2.0.1-release</version>
 	<name>desafio</name>
 	<description>Desafio Vertical Logística</description>
 	<url/>

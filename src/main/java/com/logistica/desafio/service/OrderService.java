@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,7 +36,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
 
     @PersistenceContext
-    private EntityManager entityManager;
+    EntityManager entityManager;
 
     public OrderService(UserRepository userRepository, OrderRepository orderRepository) {
         this.userRepository = userRepository;
@@ -83,7 +84,6 @@ public class OrderService {
             throw new IOException("O arquivo está vazio");
         }
 
-        // Definir o tamanho do lote para salvar registros no banco de dados em partes
         int batchSize = 50;
         int count = 0;
 
@@ -94,52 +94,66 @@ public class OrderService {
             Map<Long, User> userMap = new HashMap<>();
 
             while ((line = reader.readLine()) != null) {
-                if (line.length() >= 55) {
-                    Long userId = Long.parseLong(line.substring(0, 10).trim());
-                    String userName = line.substring(10, 55).trim();
-                    Long orderId = Long.parseLong(line.substring(55, 65).trim());
-                    Long productId = Long.parseLong(line.substring(65, 75).trim());
-                    BigDecimal value = new BigDecimal(line.substring(75, 87).trim());
-                    LocalDate date = LocalDate.parse(line.substring(87, 95).trim(), DateTimeFormatter.BASIC_ISO_DATE);
+                // Validação de comprimento da linha
+                if (line.length() >= 95) { // Verifica se a linha tem pelo menos 95 caracteres
+                    try {
+                        Long userId = Long.parseLong(line.substring(0, 10).trim());
+                        String userName = line.substring(10, 55).trim();
+                        Long orderId = Long.parseLong(line.substring(55, 65).trim());
+                        Long productId = Long.parseLong(line.substring(65, 75).trim());
 
-                    User user = userMap.getOrDefault(userId, new User());
-                    user.setId(userId);
-                    user.setName(userName);
+                        String valueString = line.substring(75, 87).trim();
+                        System.out.println("Valor extraído: " + valueString);
 
-                    Order order = user.getOrders().stream()
-                            .filter(o -> o.getId().equals(orderId))
-                            .findFirst()
-                            .orElse(new Order());
+                        BigDecimal value = new BigDecimal(valueString); // Valor decimal
+                        LocalDate date = LocalDate.parse(line.substring(87, 95).trim(), DateTimeFormatter.BASIC_ISO_DATE);
 
-                    order.setId(orderId);
-                    order.setDate(date);
-                    order.setUser(user);
+                        User user = userMap.getOrDefault(userId, new User());
+                        user.setId(userId);
+                        user.setName(userName);
 
-                    Product product = new Product();
-                    product.setId(productId);
-                    product.setValue(value);
-                    product.setOrder(order);
-                    order.getProducts().add(product);
+                        Order order = user.getOrders().stream()
+                                .filter(o -> o.getId().equals(orderId))
+                                .findFirst()
+                                .orElse(new Order());
 
-                    BigDecimal total = order.getProducts().stream()
-                            .map(Product::getValue)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    order.setTotal(total);
+                        order.setId(orderId);
+                        order.setDate(date);
+                        order.setUser(user);
 
-                    if (!user.getOrders().contains(order)) {
-                        user.getOrders().add(order);
-                    }
+                        Product product = new Product();
+                        product.setId(productId);
+                        product.setValue(value);
+                        product.setOrder(order);
+                        order.getProducts().add(product);
 
-                    userMap.put(userId, user);
-                    count++;
+                        BigDecimal total = order.getProducts().stream()
+                                .map(Product::getValue)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                        order.setTotal(total);
 
-                    // Quando o tamanho do lote é atingido, salva no banco de dados e limpa o contexto
-                    if (count % batchSize == 0) {
-                        System.out.println("Salvando lote de " + batchSize + " registros...");
-                        userRepository.saveAll(userMap.values());
-                        entityManager.flush();
-                        entityManager.clear();
-                        userMap.clear(); // Limpa o mapa para o próximo lote
+                        if (!user.getOrders().contains(order)) {
+                            user.getOrders().add(order);
+                        }
+
+                        userMap.put(userId, user);
+                        count++;
+
+                        // Quando o tamanho do lote é atingido, salva no banco de dados e limpa o contexto
+                        if (count % batchSize == 0) {
+                            System.out.println("Salvando lote de " + batchSize + " registros...");
+                            userRepository.saveAll(userMap.values());
+                            entityManager.flush();
+                            entityManager.clear();
+                            userMap.clear(); // Limpa o mapa para o próximo lote
+                        }
+                    } catch (NumberFormatException e) {
+                        System.err.println("Erro ao converter número: " + e.getMessage());
+                    } catch (DateTimeParseException e) {
+                        System.err.println("Erro ao converter data: " + e.getMessage());
+                    } catch (Exception e) {
+                        System.err.println("Erro inesperado: " + e.getMessage());
+                        throw e;
                     }
                 } else {
                     System.out.println("Linha muito curta ou malformada: " + line);
